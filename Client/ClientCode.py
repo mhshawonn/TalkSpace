@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import QMainWindow, QApplication, QPushButton, QFileDialog,
 import os
 import sys
 
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '../'))
 
 from Client.Bubble.LabelBubble import MessageDelegate, MessageModel, USER_ME, USER_THEM, USER_ADMIN
@@ -35,8 +36,60 @@ s_messages = ('connected to the server!', 'disconnected from the server!')
 HEADER_LENGTH = 8192
 
 
-# ============ Helpers ==============
-# Random Color Generator
+
+def receive():
+    
+    while True:
+        try:
+            client =20
+            SIZE =1023
+            FORMAT = ascii
+            
+            
+            #receive response sms
+            msg = client.recv(SIZE).decode(FORMAT)
+            if msg:
+                taken = msg.split(":")
+                # if response sms tag is list then print it to show the list of file
+                if taken[0] == 'LIST':
+                    for item in taken[1:]:
+                        print(item)
+                # if response sms tag is data then open a file and write bits to it
+                elif taken[0] == 'DATA':
+                    file_name = taken[1]
+                    file_path = os.path.join(folder_path, file_name)
+                    print(file_path)
+                    print("File download start")
+                    #it indicate content send over
+                    ending_string = 'FILE_TRANSMISSION_COMPLETE'.encode()
+                    with open(file_path, 'wb') as file:
+                        while True:
+                            #receiving content
+                            
+                            if content.endswith(ending_string):
+                                content = content[:-len(ending_string)]
+                                break
+                            file.write(content)
+                        file.write(content)
+                        print("File downloaded successful")
+                elif taken[0] == 'CLOSE':
+                    break
+                elif taken[0] == 'Error':
+                    print(taken[1])
+        except:
+           
+            break
+
+print('Enter [list] to see file [search] to search file [file_name] to download and [close or ctrl+c] to stop')
+
+def write():
+    while True:
+        message = input()
+        if(message.upper()=='SEARCH'):
+            #search need to file name input to find data
+            file = input('Enter file name to search  ')
+            message = f'{message}:{file}'
+       
 def rand_color():
     h, s, l = random.uniform(0, 360) / 360, random.uniform(0.2, 1), random.uniform(0.5, 1)
     r, g, b = [int(256 * i) for i in colorsys.hls_to_rgb(h, l, s)]
@@ -44,6 +97,90 @@ def rand_color():
 
 
 
+def handle(client):
+    while True:
+        try:
+            message = client.recv(1024).decode(FORMAT)
+            if message:
+                splits = message.split(":")
+            if len(splits) == 2:
+                nick = splits[0]
+                file_name = splits[1] # it use this type of operation done by client
+            else:
+                continue
+            # close to close the client
+            if file_name.upper() == 'CLOSE':
+                client.send('CLOSE:a'.encode(FORMAT))
+                try:
+                    client.close()
+                except:
+                    print("Error closing client")
+            #list to list the name of the files avaiable to upload
+            elif file_name.upper() == 'LIST':
+                #store files name to give response of list command
+                files = sorted(os.listdir(path))
+                mess = 'LIST'
+                for file in files:
+                    mess = f'{mess}:{file}'
+                client.send(mess.encode(FORMAT))
+            elif nick.upper() == 'SEARCH':
+                #store files name to give response of search command
+                files = sorted(os.listdir(path))
+                file_name = file_name.upper()
+                mess = 'LIST'
+                for file in files:
+                    if file_name in file.upper():
+                        mess = f'{mess}:{file}'
+                client.send(mess.encode(FORMAT))
+            else:
+                ok = True
+                try:
+                    file_path = os.path.join(path, file_name)
+                    file_size = os.path.getsize(file_path)
+                    #DATA is indicator to client to server sending file
+                    mess = f'DATA:{file_name}'
+                    client.send(mess.encode(FORMAT))
+                    with open(file_path, "rb") as file:
+                        file_data = file.read(SIZE)
+                        while file_data:
+                           client.send(file_data)
+                           file_data = file.read(SIZE)
+                        #ensure complete of transmission
+                        client.send(b"FILE_TRANSMISSION_COMPLETE")
+                        #print with file send where
+                        print(f'{file_name} sent to {nick}')
+                except:
+                   mess = f'Error:No such file'
+                   ok = False
+                   client.send(mess.encode(FORMAT))
+                indexc = clients.index(client)
+                if ok:
+                    print(f'{nicknames[indexc]} {file_name} send')
+        except Exception as e:
+            print(f"Error in handling client: {e}")
+            # Removing And Closing Clients
+            index = clients.index(client)
+            clients.remove(client)
+            client.close()
+            nickname = nicknames[index]
+            nicknames.remove(nickname)
+            break
+
+def receive():
+    while True:
+        # Accept Connection
+        client, address = server.accept()
+        print(f"Connected with {address} connected")
+
+        # Request And Store Nickname
+        nickname = client.recv(1024).decode(FORMAT)
+        nicknames.append(nickname)
+        clients.append(client)
+        print(f'{nickname} is connected')
+    
+        # Start Handling Thread For Client
+        thread = threading.Thread(target=handle, args=(client,))
+        thread.start()
 
 # Find Character at a given position
 def find_nth_overlapping(haystack, needle, n):
